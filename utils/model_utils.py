@@ -1,13 +1,12 @@
 import json
-import numpy as np
 import os
+import random
+
+import numpy as np
 import torch
-import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
 from tqdm import trange
-import numpy as np
-import random
 
 IMAGE_SIZE = 28
 IMAGE_PIXELS = IMAGE_SIZE * IMAGE_SIZE
@@ -16,17 +15,19 @@ NUM_CHANNELS = 1
 IMAGE_SIZE_CIFAR = 32
 NUM_CHANNELS_CIFAR = 3
 
+
 def suffer_data(data):
     data_x = data['x']
     data_y = data['y']
-        # randomly shuffle data
+    # randomly shuffle data
     np.random.seed(100)
     rng_state = np.random.get_state()
     np.random.shuffle(data_x)
     np.random.set_state(rng_state)
     np.random.shuffle(data_y)
-    return (data_x, data_y)
-    
+    return data_x, data_y
+
+
 def batch_data(data, batch_size):
     '''
     data is a dict := {'x': [numpy array], 'y': [numpy array]} (on one client)
@@ -44,22 +45,22 @@ def batch_data(data, batch_size):
 
     # loop through mini-batches
     for i in range(0, len(data_x), batch_size):
-        batched_x = data_x[i:i+batch_size]
-        batched_y = data_y[i:i+batch_size]
-        yield (batched_x, batched_y)
+        batched_x = data_x[i:i + batch_size]
+        batched_y = data_y[i:i + batch_size]
+        yield batched_x, batched_y
 
 
 def get_random_batch_sample(data_x, data_y, batch_size):
-    num_parts = len(data_x)//batch_size + 1
-    if(len(data_x) > batch_size):
-        batch_idx = np.random.choice(list(range(num_parts +1)))
-        sample_index = batch_idx*batch_size
-        if(sample_index + batch_size > len(data_x)):
-            return (data_x[sample_index:], data_y[sample_index:])
+    num_parts = len(data_x) // batch_size + 1
+    if len(data_x) > batch_size:
+        batch_idx = np.random.choice(list(range(num_parts + 1)))
+        sample_index = batch_idx * batch_size
+        if sample_index + batch_size > len(data_x):
+            return data_x[sample_index:], data_y[sample_index:]
         else:
-            return (data_x[sample_index: sample_index+batch_size], data_y[sample_index: sample_index+batch_size])
+            return data_x[sample_index: sample_index + batch_size], data_y[sample_index: sample_index + batch_size]
     else:
-        return (data_x,data_y)
+        return data_x, data_y
 
 
 def get_batch_sample(data, batch_size):
@@ -74,24 +75,25 @@ def get_batch_sample(data, batch_size):
 
     batched_x = data_x[0:batch_size]
     batched_y = data_y[0:batch_size]
-    return (batched_x, batched_y)
+    return batched_x, batched_y
+
 
 def read_cifa_data():
-    transform = transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,download=True, transform=transform)
-    testset = torchvision.datasets.CIFAR10(root='./data', train=False,download=True, transform=transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=len(trainset.data),shuffle=False)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset.data),shuffle=False)
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=len(trainset.data), shuffle=False)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset.data), shuffle=False)
 
-    for _, train_data in enumerate(trainloader,0):
+    for _, train_data in enumerate(trainloader, 0):
         trainset.data, trainset.targets = train_data
-    for _, train_data in enumerate(testloader,0):
+    for _, train_data in enumerate(testloader, 0):
         testset.data, testset.targets = train_data
 
     random.seed(1)
     np.random.seed(1)
-    NUM_USERS = 20 # should be muitiple of 10
+    NUM_USERS = 20  # should be muitiple of 10
     NUM_LABELS = 3
     # Setup directory for train/test data
     train_path = './data/train/cifa_train_100.json'
@@ -115,9 +117,8 @@ def read_cifa_data():
 
     cifa_data = []
     for i in trange(10):
-        idx = cifa_data_label==i
+        idx = cifa_data_label == i
         cifa_data.append(cifa_data_image[idx])
-
 
     print("\nNumb samples of each label:\n", [len(v) for v in cifa_data])
     users_lables = []
@@ -129,11 +130,11 @@ def read_cifa_data():
     idx = np.zeros(10, dtype=np.int64)
     for user in range(NUM_USERS):
         for j in range(NUM_LABELS):  # 3 labels for each users
-            #l = (2*user+j)%10
+            # l = (2*user+j)%10
             l = (user + j) % 10
             print("L:", l)
-            X[user] += cifa_data[l][idx[l]:idx[l]+10].tolist()
-            y[user] += (l*np.ones(10)).tolist()
+            X[user] += cifa_data[l][idx[l]:idx[l] + 10].tolist()
+            y[user] += (l * np.ones(10)).tolist()
             idx[l] += 10
 
     print("IDX1:", idx)  # counting samples for each labels
@@ -142,34 +143,34 @@ def read_cifa_data():
     user = 0
     props = np.random.lognormal(
         0, 2., (10, NUM_USERS, NUM_LABELS))  # last 5 is 5 labels
-    props = np.array([[[len(v)-NUM_USERS]] for v in cifa_data]) * \
-        props/np.sum(props, (1, 2), keepdims=True)
+    props = np.array([[[len(v) - NUM_USERS]] for v in cifa_data]) * \
+            props / np.sum(props, (1, 2), keepdims=True)
     # print("here:",props/np.sum(props,(1,2), keepdims=True))
-    #props = np.array([[[len(v)-100]] for v in mnist_data]) * \
+    # props = np.array([[[len(v)-100]] for v in mnist_data]) * \
     #    props/np.sum(props, (1, 2), keepdims=True)
-    #idx = 1000*np.ones(10, dtype=np.int64)
+    # idx = 1000*np.ones(10, dtype=np.int64)
     # print("here2:",props)
     for user in trange(NUM_USERS):
         for j in range(NUM_LABELS):  # 4 labels for each users
             # l = (2*user+j)%10
             l = (user + j) % 10
-            num_samples = int(props[l, user//int(NUM_USERS/10), j])
+            num_samples = int(props[l, user // int(NUM_USERS / 10), j])
             numran1 = random.randint(300, 600)
-            num_samples = (num_samples)  + numran1 #+ 200
-            if(NUM_USERS <= 20): 
+            num_samples = num_samples + numran1  # + 200
+            if NUM_USERS <= 20:
                 num_samples = num_samples * 2
             if idx[l] + num_samples < len(cifa_data[l]):
-                X[user] += cifa_data[l][idx[l]:idx[l]+num_samples].tolist()
-                y[user] += (l*np.ones(num_samples)).tolist()
+                X[user] += cifa_data[l][idx[l]:idx[l] + num_samples].tolist()
+                y[user] += (l * np.ones(num_samples)).tolist()
                 idx[l] += num_samples
                 print("check len os user:", user, j,
-                    "len data", len(X[user]), num_samples)
+                      "len data", len(X[user]), num_samples)
 
-    print("IDX2:", idx) # counting samples for each labels
+    print("IDX2:", idx)  # counting samples for each labels
 
     # Create data structure
-    train_data = {'users': [], 'user_data':{}, 'num_samples':[]}
-    test_data = {'users': [], 'user_data':{}, 'num_samples':[]}
+    train_data = {'users': [], 'user_data': {}, 'num_samples': []}
+    test_data = {'users': [], 'user_data': {}, 'num_samples': []}
 
     # Setup 5 users
     # for i in trange(5, ncols=120):
@@ -180,20 +181,22 @@ def read_cifa_data():
         X[i][:], y[i][:] = zip(*combined)
 
         num_samples = len(X[i])
-        train_len = int(0.75*num_samples)
+        train_len = int(0.75 * num_samples)
         test_len = num_samples - train_len
 
-        #X_train, X_test, y_train, y_test = train_test_split(X[i], y[i], train_size=0.75, stratify=y[i])\
-        
+        # X_train, X_test, y_train, y_test = train_test_split(X[i], y[i], train_size=0.75, stratify=y[i])\
+
         test_data['users'].append(uname)
-        test_data["user_data"][uname] =  {'x': X[i][:test_len], 'y': y[i][:test_len]} 
+        test_data["user_data"][uname] = {'x': X[i][:test_len], 'y': y[i][:test_len]}
         test_data['num_samples'].append(test_len)
 
-        train_data["user_data"][uname] =  {'x': X[i][test_len:], 'y': y[i][test_len:]}
+        train_data["user_data"][uname] = {'x': X[i][test_len:], 'y': y[i][test_len:]}
         train_data['users'].append(uname)
         train_data['num_samples'].append(train_len)
-        
-        
+
+        print("User {} - Class of train data: {}".format(i, np.unique(y[i][test_len:])))
+        print("User {} - Class of test data: {}".format(i, np.unique(y[i][:test_len])))
+
     # random.seed(1)
     # np.random.seed(1)
     # NUM_USERS = 1 # should be muitiple of 10
@@ -231,20 +234,21 @@ def read_cifa_data():
 
     # # Create data structure
     # test_data = {'users': [], 'user_data':{}, 'num_samples':[]}
-    
+
     # for i in range(NUM_USERS):
     #     num_samples = len(cifa_data_image_test)
     #     test_data['users'].append(uname) 
     #     test_data['user_data'][uname] = {'x': cifa_data_image_test.tolist(), 'y': cifa_data_label_test.tolist()}
     #     test_data['num_samples'].append(num_samples)
 
-    return train_data['users'], _ , train_data['user_data'], test_data['user_data']
+    return train_data['users'], _, train_data['user_data'], test_data['user_data']
+
 
 def read_data(dataset):
-    '''parses data in given train and test data directories
+    """parses data in given train and test data directories
 
     assumes:
-    - the data in the input directories are .json files with 
+    - the data in the input directories are .json files with
         keys 'users' and 'user_data'
     - the set of train set users is the same as the set of test set users
 
@@ -253,14 +257,14 @@ def read_data(dataset):
         groups: list of group ids; empty list if none found
         train_data: dictionary of train data
         test_data: dictionary of test data
-    '''
+    """
 
-    if(dataset == "Cifar10"):
+    if dataset == "Cifar10":
         clients, groups, train_data, test_data = read_cifa_data()
         return clients, groups, train_data, test_data
 
-    train_data_dir = os.path.join('data',dataset,'data', 'train')
-    test_data_dir = os.path.join('data',dataset,'data', 'test')
+    train_data_dir = os.path.join('data', dataset, 'data', 'train')
+    test_data_dir = os.path.join('data', dataset, 'data', 'test')
     clients = []
     groups = []
     train_data = {}
@@ -289,32 +293,36 @@ def read_data(dataset):
 
     return clients, groups, train_data, test_data
 
-def read_user_data(index,data,dataset):
+
+def read_user_data(index, data, dataset):
     id = data[0][index]
     train_data = data[2][id]
     test_data = data[3][id]
     X_train, y_train, X_test, y_test = train_data['x'], train_data['y'], test_data['x'], test_data['y']
-    if(dataset == "Mnist"):
+    if dataset == "Mnist":
         X_train, y_train, X_test, y_test = train_data['x'], train_data['y'], test_data['x'], test_data['y']
         X_train = torch.Tensor(X_train).view(-1, NUM_CHANNELS, IMAGE_SIZE, IMAGE_SIZE).type(torch.float32)
         y_train = torch.Tensor(y_train).type(torch.int64)
         X_test = torch.Tensor(X_test).view(-1, NUM_CHANNELS, IMAGE_SIZE, IMAGE_SIZE).type(torch.float32)
         y_test = torch.Tensor(y_test).type(torch.int64)
-    elif(dataset == "Cifar10"):
+    elif dataset == "Cifar10":
         X_train, y_train, X_test, y_test = train_data['x'], train_data['y'], test_data['x'], test_data['y']
-        X_train = torch.Tensor(X_train).view(-1, NUM_CHANNELS_CIFAR, IMAGE_SIZE_CIFAR, IMAGE_SIZE_CIFAR).type(torch.float32)
+        X_train = torch.Tensor(X_train).view(-1, NUM_CHANNELS_CIFAR, IMAGE_SIZE_CIFAR, IMAGE_SIZE_CIFAR).type(
+            torch.float32)
         y_train = torch.Tensor(y_train).type(torch.int64)
-        X_test = torch.Tensor(X_test).view(-1, NUM_CHANNELS_CIFAR, IMAGE_SIZE_CIFAR, IMAGE_SIZE_CIFAR).type(torch.float32)
+        X_test = torch.Tensor(X_test).view(-1, NUM_CHANNELS_CIFAR, IMAGE_SIZE_CIFAR, IMAGE_SIZE_CIFAR).type(
+            torch.float32)
         y_test = torch.Tensor(y_test).type(torch.int64)
     else:
         X_train = torch.Tensor(X_train).type(torch.float32)
         y_train = torch.Tensor(y_train).type(torch.int64)
         X_test = torch.Tensor(X_test).type(torch.float32)
         y_test = torch.Tensor(y_test).type(torch.int64)
-    
+
     train_data = [(x, y) for x, y in zip(X_train, y_train)]
     test_data = [(x, y) for x, y in zip(X_test, y_test)]
     return id, train_data, test_data
+
 
 class Metrics(object):
     def __init__(self, clients, params):
@@ -347,8 +355,9 @@ class Metrics(object):
         metrics['bytes_written'] = self.bytes_written
         metrics['bytes_read'] = self.bytes_read
         metrics_dir = os.path.join('out', self.params['dataset'], 'metrics_{}_{}_{}_{}_{}.json'.format(
-            self.params['seed'], self.params['optimizer'], self.params['learning_rate'], self.params['num_epochs'], self.params['mu']))
-        #os.mkdir(os.path.join('out', self.params['dataset']))
+            self.params['seed'], self.params['optimizer'], self.params['learning_rate'], self.params['num_epochs'],
+            self.params['mu']))
+        # os.mkdir(os.path.join('out', self.params['dataset']))
         if not os.path.exists('out'):
             os.mkdir('out')
         if not os.path.exists(os.path.join('out', self.params['dataset'])):
